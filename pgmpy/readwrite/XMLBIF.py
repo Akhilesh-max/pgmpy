@@ -3,6 +3,7 @@
 import xml.etree.ElementTree as etree
 from io import BytesIO
 from itertools import chain
+import warnings
 
 import numpy as np
 
@@ -396,15 +397,24 @@ class XMLBIFWriter(object):
         XMLBIF states must start with a letter an only contain letters,
         numbers and underscores.
         """
-        # TODO: Throw a warning that the state names are going to be modified instead of silently modifying it.
         s = str(state_name)
         s_fixed = (
             pp.CharsNotIn(pp.alphanums + "_")
             .setParseAction(pp.replaceWith("_"))
             .transformString(s)
         )
+        
+        # Add a prefix 'x' if the state name doesn't start with a letter
         if not s_fixed[0].isalpha():
-            s_fixed = s_fixed
+            s_fixed = "x_" + s_fixed
+            
+        if s != s_fixed:
+            warnings.warn(
+                f"State name '{s}' has been modified to '{s_fixed}' to comply with XMLBIF format requirements. "
+                "XMLBIF states must start with a letter and only contain letters, numbers, and underscores.",
+                UserWarning
+            )
+            
         return s_fixed
 
     def get_properties(self):
