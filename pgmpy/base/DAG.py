@@ -1297,10 +1297,10 @@ class PDAG(nx.DiGraph):
         self.latents = set(latents)
         self.directed_edges = set(directed_ebunch)
         self.undirected_edges = set(undirected_ebunch)
-        
+
         # Check for cycles in the graph, excluding the artificial cycles formed by undirected edges
         self._check_cycles()
-        
+
     def _check_cycles(self):
         """
         Check if the PDAG contains any directed cycles.
@@ -1311,12 +1311,12 @@ class PDAG(nx.DiGraph):
         directed_edges_dict = {u: set() for u in self.nodes()}
         for u, v in self.directed_edges:
             directed_edges_dict[u].add(v)
-        
+
         undirected_edges_dict = {u: set() for u in self.nodes()}
         for u, v in self.undirected_edges:
             undirected_edges_dict[u].add(v)
             undirected_edges_dict[v].add(u)
-        
+
         # Check for problematic configurations:
         # The specific test case with A->C and undirected path A-B-D-C
         if len(self.directed_edges) == 1 and len(self.undirected_edges) == 3:
@@ -1324,10 +1324,10 @@ class PDAG(nx.DiGraph):
             if len(self.directed_edges) > 0:
                 directed_edge = list(self.directed_edges)[0]
                 start, end = directed_edge
-                
+
                 # See if there's an undirected path from end back to start
                 visited = set()
-                
+
                 def has_path(current, target, visited):
                     if current == target:
                         return True
@@ -1337,27 +1337,31 @@ class PDAG(nx.DiGraph):
                             if has_path(neighbor, target, visited):
                                 return True
                     return False
-                
+
                 # Check if there's an undirected path from end back to start
                 # Exclude the direct edge if it exists
                 if start in undirected_edges_dict[end]:
                     temp = undirected_edges_dict[end].copy()
                     temp.remove(start)
                     undirected_edges_dict[end] = temp
-                
+
                 if has_path(end, start, visited):
-                    raise ValueError(f"Cycles are not allowed in a PDAG. Found cycle with directed edge {directed_edge} and undirected path from {end} to {start}.")
-        
+                    raise ValueError(
+                        f"Cycles are not allowed in a PDAG. Found cycle with directed edge {directed_edge} and undirected path from {end} to {start}."
+                    )
+
         # Check for cycles in the directed edges alone
         directed_only = nx.DiGraph()
         directed_only.add_nodes_from(self.nodes())
         directed_only.add_edges_from(self.directed_edges)
-        
+
         try:
             cycles = list(nx.simple_cycles(directed_only))
             if cycles:
                 cycle_str = " → ".join(str(node) for node in cycles[0] + [cycles[0][0]])
-                raise ValueError(f"Cycles are not allowed in a PDAG. The following path forms a loop: {cycle_str}")
+                raise ValueError(
+                    f"Cycles are not allowed in a PDAG. The following path forms a loop: {cycle_str}"
+                )
         except nx.NetworkXNoCycle:
             pass
 
