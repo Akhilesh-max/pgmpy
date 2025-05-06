@@ -1267,7 +1267,7 @@ class PDAG(nx.DiGraph):
     an undirected edge between X - Y is represented using X -> Y and X <- Y.
     """
 
-    def __init__(self, directed_ebunch=[], undirected_ebunch=[], latents=[]):
+    def __init__(self, directed_ebunch=[], undirected_ebunch=[], latents=[], skip_cycle_check=False):
         """
         Initializes a PDAG class.
 
@@ -1281,6 +1281,10 @@ class PDAG(nx.DiGraph):
 
         latents: list, array-like
             List of nodes which are latent variables.
+
+        skip_cycle_check: bool (default: False)
+            If True, skip the cycle detection check. This is useful for algorithms 
+            like PC that may temporarily create a cyclic graph during orientation.
 
         Returns
         -------
@@ -1297,9 +1301,10 @@ class PDAG(nx.DiGraph):
         self.latents = set(latents)
         self.directed_edges = set(directed_ebunch)
         self.undirected_edges = set(undirected_ebunch)
-
+        
         # Check for cycles in the graph, excluding the artificial cycles formed by undirected edges
-        self._check_cycles()
+        if not skip_cycle_check:
+            self._check_cycles()
 
     def _check_cycles(self):
         """

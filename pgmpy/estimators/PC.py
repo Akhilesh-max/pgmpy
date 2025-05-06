@@ -144,8 +144,8 @@ class PC(StructureEstimator):
         ----------
         [1] Original PC: P. Spirtes, C. Glymour, and R. Scheines, Causation,
                     Prediction, and Search, 2nd ed. Cambridge, MA: MIT Press, 2000.
-        [2] Stable PC:  D. Colombo and M. H. Maathuis, “A modification of the PC algorithm
-                    yielding order-independent skeletons,” ArXiv e-prints, Nov. 2012.
+        [2] Stable PC:  D. Colombo and M. H. Maathuis, "A modification of the PC algorithm
+                    yielding order-independent skeletons," ArXiv e-prints, Nov. 2012.
         [3] Parallel PC: Le, Thuc, et al. "A fast PC algorithm for high dimensional causal
                     discovery with multi-core PCs." IEEE/ACM transactions on computational
                     biology and bioinformatics (2016).
@@ -543,7 +543,7 @@ class PC(StructureEstimator):
                 directed_edges.append((u, v))
 
         pdag_oriented = PDAG(
-            directed_ebunch=directed_edges, undirected_ebunch=undirected_edges
+            directed_ebunch=directed_edges, undirected_ebunch=undirected_edges, skip_cycle_check=True
         )
         pdag_oriented.add_nodes_from(pdag.nodes())
 
@@ -686,4 +686,4 @@ class PC(StructureEstimator):
             else:
                 directed_edges.append((u, v))
 
-        return PDAG(directed_ebunch=directed_edges, undirected_ebunch=undirected_edges)
+        return PDAG(directed_ebunch=directed_edges, undirected_ebunch=undirected_edges, skip_cycle_check=True)
