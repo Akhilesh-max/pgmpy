@@ -3,7 +3,6 @@ import unittest
 
 import numpy as np
 import numpy.testing as np_test
-from pgmpy.utils import get_example_model
 
 from pgmpy.factors.continuous import LinearGaussianCPD
 from pgmpy.factors.discrete import DiscreteFactor, TabularCPD
@@ -17,6 +16,7 @@ from pgmpy.models import (
     JunctionTree,
     LinearGaussianBayesianNetwork,
 )
+from pgmpy.utils import get_example_model
 
 
 class TestVariableElimination(unittest.TestCase):
@@ -558,11 +558,11 @@ class TestSnowNetwork(unittest.TestCase):
                 )
                 np_test.assert_array_almost_equal(query4.values, [0.34375, 0.65625])
 
-                # TODO: State name should be returned here.
+                # State name should be returned here.
                 map4 = infer.map_query(
                     ["Traffic"], virtual_evidence=[virt_evidence], show_progress=False
                 )
-                self.assertTrue(map4 in [{"Traffic": "slow"}, {"Traffic": 1}])
+                self.assertEqual(map4, {"Traffic": "slow"})
 
         virt_evidence1_cpd = TabularCPD(
             "Risk", 2, [[0.7], [0.3]], state_names={"Risk": ["yes", "no"]}

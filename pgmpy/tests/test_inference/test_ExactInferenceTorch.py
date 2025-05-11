@@ -551,11 +551,11 @@ class TestSnowNetworkTorch(unittest.TestCase):
                 compat_fns.to_numpy(query4.values), [0.34375, 0.65625]
             )
 
-            # TODO: State name should be returned here.
+            # State name should be returned here.
             map4 = infer.map_query(
                 ["Traffic"], virtual_evidence=[virt_evidence], show_progress=False
             )
-            self.assertTrue(map4 in [{"Traffic": "slow"}, {"Traffic": 1}])
+            self.assertEqual(map4, {"Traffic": "slow"})
 
         virt_evidence1 = TabularCPD(
             "Risk", 2, [[0.7], [0.3]], state_names={"Risk": ["yes", "no"]}
