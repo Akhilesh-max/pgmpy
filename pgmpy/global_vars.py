@@ -7,6 +7,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pgmpy")
 
 
+class DuplicateFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        self.msgs = set()
+
+    def filter(self, record):
+        msg = record.getMessage()
+        is_new = msg not in self.msgs
+        if is_new:
+            self.msgs.add(msg)
+        return is_new
+
+
+logger.addFilter(DuplicateFilter())
+
+
 class Config:
     def __init__(self):
         """
