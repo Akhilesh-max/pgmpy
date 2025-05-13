@@ -538,3 +538,88 @@ class LinearGaussianBayesianNetwork(DAG):
 
         lgbn_model.add_cpds(*cpds)
         return lgbn_model
+
+    def query(
+        self,
+        variables,
+        evidence=None,
+        joint=True,
+        show_progress=True,
+    ):
+        """
+        Query the Linear Gaussian Bayesian Network to compute the posterior distribution
+        of variables given evidence.
+
+        For Linear Gaussian Bayesian Networks, the posterior distribution is also Gaussian,
+        and parameters can be computed directly using the predict method with the 'marginal'
+        distribution type.
+
+        Parameters
+        ----------
+        variables: list
+            List of variables for which to compute the posterior probability.
+
+        evidence: dict, default=None
+            Dictionary of evidence. The keys are the variables and the values are the observed values.
+
+        joint: boolean, default=True
+            If True, returns a Joint Distribution over `variables`.
+            If False, returns a dict of distributions over each of the `variables`.
+
+        show_progress: boolean, default=True
+            Currently not used for LinearGaussianBayesianNetworks.
+
+        Returns
+        -------
+        dict
+            If joint=True: A dictionary with keys 'mean' and 'cov' representing the joint
+            posterior distribution of the variables.
+            If joint=False: A dictionary mapping each variable to its posterior mean and variance.
+
+        Examples
+        --------
+        >>> from pgmpy.models import LinearGaussianBayesianNetwork
+        >>> from pgmpy.factors.continuous import LinearGaussianCPD
+        >>> model = LinearGaussianBayesianNetwork([('x1', 'x2'), ('x2', 'x3')])
+        >>> cpd1 = LinearGaussianCPD('x1', [1], 4)
+        >>> cpd2 = LinearGaussianCPD('x2', [-5, 0.5], 4, ['x1'])
+        >>> cpd3 = LinearGaussianCPD('x3', [4, -1], 3, ['x2'])
+        >>> model.add_cpds(cpd1, cpd2, cpd3)
+        >>> posterior = model.query(['x2', 'x3'], evidence={'x1': 2})
+        """
+        if not variables:
+            raise ValueError(
+                "The `variables` argument must contain at least one variable."
+            )
+
+        if evidence is None:
+            evidence = {}
+
+        common_vars = set(evidence).intersection(set(variables))
+        if common_vars:
+            raise ValueError(
+                f"Can't have the same variables in both `variables` and `evidence`. Found in both: {common_vars}"
+            )
+
+        # Using the predict method with 'marginal' to get the posterior distribution
+        result = self.predict(pd.DataFrame([evidence]), distribution="marginal")
+
+        # Extract the variables of interest from the result
+        if joint:
+            selected_vars = variables
+            mean = result["mean"].loc[0, selected_vars].values
+
+            # Extract the covariance submatrix for the requested variables
+            indices = [result["mean"].columns.get_loc(var) for var in selected_vars]
+            cov = result["cov"][0][indices, :][:, indices]
+
+            return {"mean": mean, "cov": cov, "variables": selected_vars}
+        else:
+            result_dict = {}
+            for var in variables:
+                var_idx = result["mean"].columns.get_loc(var)
+                result_dict[var] = {
+                    "mean": result["mean"].loc[0, var],
+                    "variance": result["cov"][0][var_idx, var_idx],
+                }
+            return result_dict

@@ -24,9 +24,9 @@ from pgmpy.models import (
     FactorGraph,
     FunctionalBayesianNetwork,
     JunctionTree,
+    LinearGaussianBayesianNetwork,
 )
 from pgmpy.utils import compat_fns
-from pgmpy.models import LinearGaussianBayesianNetwork
 
 
 class VariableElimination(Inference):
@@ -297,8 +297,9 @@ class VariableElimination(Inference):
             self.model, (LinearGaussianBayesianNetwork, FunctionalBayesianNetwork)
         ):
             raise NotImplementedError(
-                f"Variable Elimination is not supported for {self.model.__class__.__name__}."
-                f"Please use the 'predict' method of the {self.model.__class__.__name__} class instead."
+                f"Variable Elimination is not supported for {self.model.__class__.__name__}. "
+                f"Please use the 'query' method of the {self.model.__class__.__name__} class directly instead. "
+                f"Example: model.query(['X', 'Y'], evidence={{'Z': 1}})"
             )
 
         # Step 1: Parameter Checks

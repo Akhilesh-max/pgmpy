@@ -221,6 +221,63 @@ class TestLGBNMethods(unittest.TestCase):
             model3, LinearGaussianBayesianNetwork, "Incorrect instance"
         )
 
+    def test_query(self):
+        """Test the query method for computing posterior distributions."""
+        import numpy as np
+
+        from pgmpy.factors.continuous import LinearGaussianCPD
+
+        # Create a simple model for testing: X1 -> X2 -> X3
+        model = LinearGaussianBayesianNetwork([("X1", "X2"), ("X2", "X3")])
+        cpd1 = LinearGaussianCPD("X1", [2], 1)  # X1 ~ N(2, 1)
+        cpd2 = LinearGaussianCPD(
+            "X2", [0, 1], 1, ["X1"]
+        )  # X2 ~ N(0 + 1*X1, 1) = N(X1, 1)
+        cpd3 = LinearGaussianCPD(
+            "X3", [0, 1], 1, ["X2"]
+        )  # X3 ~ N(0 + 1*X2, 1) = N(X2, 1)
+        model.add_cpds(cpd1, cpd2, cpd3)
+
+        # Test querying with no evidence
+        result1 = model.query(["X3"])
+        self.assertIsInstance(result1, dict)
+        self.assertEqual(len(result1), 3)  # Should contain mean, cov, variables
+        self.assertEqual(result1["variables"], ["X3"])
+        # X3 should have mean = 2 (propagated from X1)
+        self.assertAlmostEqual(result1["mean"][0], 2.0, places=5)
+
+        # Test with evidence
+        result2 = model.query(["X3"], evidence={"X1": 5})
+        # X3 should have mean = 5 (evidence X1=5 propagates to X3)
+        self.assertAlmostEqual(result2["mean"][0], 5.0, places=5)
+
+        # Test joint query
+        result3 = model.query(["X2", "X3"], evidence={"X1": 3})
+        self.assertEqual(result3["variables"], ["X2", "X3"])
+        self.assertEqual(len(result3["mean"]), 2)  # Mean for both variables
+        # X2 should have mean = 3, X3 should have mean = 3
+        self.assertAlmostEqual(result3["mean"][0], 3.0, places=5)  # X2
+        self.assertAlmostEqual(result3["mean"][1], 3.0, places=5)  # X3
+        self.assertEqual(result3["cov"].shape, (2, 2))  # 2x2 covariance matrix
+
+        # Test non-joint query (individual marginals)
+        result4 = model.query(["X2", "X3"], evidence={"X1": 3}, joint=False)
+        self.assertIsInstance(result4, dict)
+        self.assertEqual(len(result4), 2)  # One entry per variable
+        self.assertIn("X2", result4)
+        self.assertIn("X3", result4)
+        self.assertAlmostEqual(result4["X2"]["mean"], 3.0, places=5)
+        self.assertAlmostEqual(result4["X3"]["mean"], 3.0, places=5)
+
+        # Test with error cases
+        # Empty variables list
+        with self.assertRaises(ValueError):
+            model.query([], evidence={"X1": 3})
+
+        # Same variable in evidence and query
+        with self.assertRaises(ValueError):
+            model.query(["X1"], evidence={"X1": 3})
+
     def tearDown(self):
         del self.model, self.cpd1, self.cpd2, self.cpd3
 

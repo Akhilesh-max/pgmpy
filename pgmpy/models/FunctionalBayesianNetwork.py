@@ -404,3 +404,166 @@ class FunctionalBayesianNetwork(DiscreteBayesianNetwork):
             return dict(pyro.get_param_store().items())
         else:
             return mcmc.get_samples()
+
+    def query(
+        self,
+        variables,
+        evidence=None,
+        joint=True,
+        show_progress=True,
+        num_samples=10000,
+        return_type="samples",
+        max_recursion=3,
+        _recursion_depth=0,
+    ):
+        """
+        Query the Functional Bayesian Network to compute the posterior distribution
+        of variables given evidence.
+
+        For Functional Bayesian Networks, this method uses sampling to approximate
+        the posterior distribution.
+
+        Parameters
+        ----------
+        variables: list
+            List of variables for which to compute the posterior probability.
+
+        evidence: dict, default=None
+            Dictionary of evidence. The keys are the variables and the values are the observed values.
+
+        joint: boolean, default=True
+            If True, returns samples from the joint distribution of `variables`.
+            If False, returns samples for each variable separately.
+
+        show_progress: boolean, default=True
+            Currently not used for FunctionalBayesianNetworks.
+
+        num_samples: int, default=10000
+            Number of samples to generate for the posterior approximation.
+
+        return_type: str, default='samples'
+            Type of the result to return. Options:
+            - 'samples': Return raw samples from the posterior distribution
+            - 'kde': Return a kernel density estimate of the posterior (only for continuous variables)
+
+        max_recursion: int, default=3
+            Maximum recursion depth when generating samples. If this limit is reached and not
+            enough samples are available, the method will return whatever samples it has.
+
+        _recursion_depth: int, default=0
+            Internal parameter to track recursion depth. Do not set manually.
+
+        Returns
+        -------
+        pandas.DataFrame or dict
+            If return_type='samples': DataFrame containing samples from the posterior distribution.
+            If return_type='kde' and joint=True: A dictionary with the joint KDE function.
+            If return_type='kde' and joint=False: A dictionary mapping each variable to its KDE.
+
+        Examples
+        --------
+        >>> import pyro.distributions as dist
+        >>> from pgmpy.models import FunctionalBayesianNetwork
+        >>> from pgmpy.factors.hybrid import FunctionalCPD
+        >>> model = FunctionalBayesianNetwork([('x1', 'x2'), ('x2', 'x3')])
+        >>> cpd1 = FunctionalCPD('x1', lambda _: dist.Normal(0, 1))
+        >>> cpd2 = FunctionalCPD('x2', lambda parent: dist.Normal(parent['x1'] + 2.0, 1), parents=['x1'])
+        >>> cpd3 = FunctionalCPD('x3', lambda parent: dist.Normal(parent['x2'] + 0.3, 2), parents=['x2'])
+        >>> model.add_cpds(cpd1, cpd2, cpd3)
+        >>> posterior_samples = model.query(['x2', 'x3'], evidence={'x1': 2.0})
+        """
+        if not variables:
+            raise ValueError(
+                "The `variables` argument must contain at least one variable."
+            )
+
+        common_vars = set(evidence or {}).intersection(set(variables))
+        if common_vars:
+            raise ValueError(
+                f"Can't have the same variables in both `variables` and `evidence`. Found in both: {common_vars}"
+            )
+
+        # Generate posterior samples using rejection sampling
+        if evidence:
+            # Get a larger set of samples to account for rejected samples
+            oversample_factor = 10  # We'll generate 10x more samples than needed
+            samples = self.simulate(n_samples=num_samples * oversample_factor)
+
+            # Filter samples based on evidence
+            for var, value in evidence.items():
+                # Use a relative tolerance for floating point comparisons
+                if isinstance(value, (int, float)):
+                    # Use numpy's isclose which uses both absolute and relative tolerance
+                    import numpy as np
+
+                    tol_abs = 1e-8  # Absolute tolerance
+                    tol_rel = 1e-5  # Relative tolerance
+                    samples = samples[
+                        np.isclose(samples[var], value, rtol=tol_rel, atol=tol_abs)
+                    ]
+                else:
+                    samples = samples[samples[var] == value]
+
+            # If we don't have enough samples after filtering, generate more
+            if len(samples) < num_samples and _recursion_depth < max_recursion:
+                return self.query(
+                    variables=variables,
+                    evidence=evidence,
+                    joint=joint,
+                    num_samples=num_samples,
+                    return_type=return_type,
+                    show_progress=show_progress,
+                    max_recursion=max_recursion,
+                    _recursion_depth=_recursion_depth + 1,
+                )
+
+            # Take only the required number of samples or all if we have fewer
+            if len(samples) <= num_samples:
+                # Not enough samples, but we've hit max recursion - use what we have
+                if _recursion_depth >= max_recursion:
+                    logger.warning(
+                        f"Could only generate {len(samples)} samples after {max_recursion} "
+                        f"attempts. Consider increasing max_recursion or num_samples*oversample_factor "
+                        f"if evidence has low probability."
+                    )
+            else:
+                # Take only the required number of samples
+                samples = samples.iloc[:num_samples]
+        else:
+            # If no evidence, just simulate from the model
+            samples = self.simulate(n_samples=num_samples)
+
+        # Extract requested variables
+        samples = samples[variables]
+
+        # Return the appropriate format based on settings
+        if return_type == "samples":
+            if joint:
+                return samples
+            else:
+                return {var: samples[var] for var in variables}
+        elif return_type == "kde":
+            try:
+                from scipy import stats
+
+                if joint:
+                    if len(variables) == 1:
+                        var = variables[0]
+                        kde = stats.gaussian_kde(samples[var])
+                        return {"kde": kde, "variables": variables}
+                    else:
+                        kde = stats.gaussian_kde(samples.T)
+                        return {"kde": kde, "variables": variables}
+                else:
+                    result_dict = {}
+                    for var in variables:
+                        result_dict[var] = stats.gaussian_kde(samples[var])
+                    return result_dict
+            except ImportError:
+                raise ImportError(
+                    "scipy is required for KDE estimation. Please install it using: pip install scipy"
+                )
+        else:
+            raise ValueError(
+                f"Unknown return_type: {return_type}. Available options: 'samples', 'kde'"
+            )

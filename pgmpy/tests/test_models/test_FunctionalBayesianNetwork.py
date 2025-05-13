@@ -935,6 +935,100 @@ class TestFBNMethods(unittest.TestCase):
         self.assertAlmostEqual(params["ibpB_alpha1"].mean(), 0.125, delta=0.2)
         self.assertAlmostEqual(params["ibpB_sigma"].mean(), 0.461, delta=0.3)
 
+    def test_query(self):
+        """Test the query method for computing posterior distributions via sampling."""
+        import numpy as np
+        import pyro.distributions as dist
+
+        from pgmpy.factors.hybrid import FunctionalCPD
+
+        # Create a simple model for testing: X1 -> X2 -> X3
+        model = FunctionalBayesianNetwork([("X1", "X2"), ("X2", "X3")])
+        # X1 ~ N(1, 1)
+        cpd1 = FunctionalCPD("X1", lambda _: dist.Normal(1.0, 1.0))
+        # X2 ~ N(X1, 0.5)
+        cpd2 = FunctionalCPD(
+            "X2", lambda parent: dist.Normal(parent["X1"], 0.5), parents=["X1"]
+        )
+        # X3 ~ N(X2, 0.5)
+        cpd3 = FunctionalCPD(
+            "X3", lambda parent: dist.Normal(parent["X2"], 0.5), parents=["X2"]
+        )
+        model.add_cpds(cpd1, cpd2, cpd3)
+
+        # Set a fixed seed for reproducibility
+        import random
+
+        random.seed(42)
+        np.random.seed(42)
+        import torch
+
+        torch.manual_seed(42)
+        import pyro
+
+        pyro.set_rng_seed(42)
+
+        # Test querying with no evidence, small sample for faster tests
+        result1 = model.query(["X3"], num_samples=100)
+        self.assertIsInstance(result1, pd.DataFrame)
+        self.assertEqual(len(result1.columns), 1)  # Only X3 column
+        self.assertEqual(result1.shape[0], 100)  # 100 samples
+        # Mean should be approximately 1.0 (propagated from X1)
+        self.assertAlmostEqual(result1["X3"].mean(), 1.0, delta=0.5)
+
+        # Test with evidence
+        result2 = model.query(["X3"], evidence={"X1": 5.0}, num_samples=100)
+        # Mean should be approximately 5.0 (evidence X1=5 propagates to X3)
+        self.assertAlmostEqual(result2["X3"].mean(), 5.0, delta=0.5)
+
+        # Test joint query
+        result3 = model.query(["X2", "X3"], evidence={"X1": 3.0}, num_samples=100)
+        self.assertEqual(len(result3.columns), 2)  # X2 and X3 columns
+        # Means should be approximately 3.0 (propagated from X1=3)
+        self.assertAlmostEqual(result3["X2"].mean(), 3.0, delta=0.5)
+        self.assertAlmostEqual(result3["X3"].mean(), 3.0, delta=0.5)
+
+        # Test non-joint query (individual samples)
+        result4 = model.query(
+            ["X2", "X3"], evidence={"X1": 3.0}, joint=False, num_samples=100
+        )
+        self.assertIsInstance(result4, dict)
+        self.assertEqual(len(result4), 2)  # One entry per variable
+        self.assertIn("X2", result4)
+        self.assertIn("X3", result4)
+        self.assertEqual(len(result4["X2"]), 100)  # 100 samples
+        self.assertEqual(len(result4["X3"]), 100)  # 100 samples
+
+        # Test KDE return type
+        result5 = model.query(
+            ["X3"], evidence={"X1": 2.0}, num_samples=100, return_type="kde"
+        )
+        self.assertIsInstance(result5, dict)
+        self.assertIn("kde", result5)
+        self.assertIn("variables", result5)
+
+        # Test with error cases
+        # Empty variables list
+        with self.assertRaises(ValueError):
+            model.query([], evidence={"X1": 3.0})
+
+        # Same variable in evidence and query
+        with self.assertRaises(ValueError):
+            model.query(["X1"], evidence={"X1": 3.0})
+
+        # Invalid return_type
+        with self.assertRaises(ValueError):
+            model.query(["X3"], return_type="invalid_type")
+
+        # Test recursive case (very low probability evidence)
+        # We don't actually run a real test here as it would be slow,
+        # but we check that the code path works
+        try:
+            # This is a dummy test that should invoke recursion but finish quickly
+            model.query(["X3"], evidence={"X1": 100.0}, num_samples=5, max_recursion=1)
+        except Exception as e:
+            self.fail(f"query with recursion raised an unexpected exception: {e}")
+
     def tearDown(self):
         del self.model
         del self.cpd1
