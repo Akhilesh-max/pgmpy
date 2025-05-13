@@ -1971,3 +1971,69 @@ class TestSimulation(unittest.TestCase):
         missing_fraction = samples["U"].isnull().mean()
         expected_missing_fraction = 0.8
         self.assertAlmostEqual(missing_fraction, expected_missing_fraction, delta=0.1)
+
+    def test_query(self):
+        """Test the query method as a wrapper around inference methods."""
+        from pgmpy.factors.discrete import TabularCPD
+        from pgmpy.inference import BeliefPropagation, VariableElimination
+
+        # Create a simple model for testing
+        model = DiscreteBayesianNetwork([("A", "B"), ("C", "B")])
+        cpd_a = TabularCPD("A", 2, [[0.2], [0.8]])
+        cpd_c = TabularCPD("C", 2, [[0.3], [0.7]])
+        cpd_b = TabularCPD(
+            "B",
+            2,
+            [[0.1, 0.2, 0.3, 0.4], [0.9, 0.8, 0.7, 0.6]],
+            evidence=["A", "C"],
+            evidence_card=[2, 2],
+        )
+        model.add_cpds(cpd_a, cpd_c, cpd_b)
+
+        # Test query using Variable Elimination
+        result_ve_direct = VariableElimination(model).query(
+            ["B"], evidence={"A": 0, "C": 1}
+        )
+        result_ve_wrapper = model.query(
+            ["B"], evidence={"A": 0, "C": 1}, inference_method="variable_elimination"
+        )
+        self.assertEqual(
+            result_ve_direct.values.tolist(), result_ve_wrapper.values.tolist()
+        )
+
+        # Test query using Belief Propagation
+        result_bp_direct = BeliefPropagation(model).query(
+            ["B"], evidence={"A": 0, "C": 1}
+        )
+        result_bp_wrapper = model.query(
+            ["B"], evidence={"A": 0, "C": 1}, inference_method="belief_propagation"
+        )
+        self.assertEqual(
+            result_bp_direct.values.tolist(), result_bp_wrapper.values.tolist()
+        )
+
+        # Test with joint=False (returns dict of distributions)
+        result_ve_joint_false = model.query(
+            ["A", "B"],
+            evidence={"C": 0},
+            joint=False,
+            inference_method="variable_elimination",
+        )
+        self.assertIsInstance(result_ve_joint_false, dict)
+        self.assertTrue("A" in result_ve_joint_false and "B" in result_ve_joint_false)
+
+        # Test with invalid inference method
+        with self.assertRaises(ValueError):
+            model.query(["B"], evidence={"A": 0}, inference_method="invalid_method")
+
+        # Test with virtual evidence
+        from pgmpy.factors.discrete import TabularCPD
+
+        virtual_evidence = [TabularCPD("A", 2, [[0.3], [0.7]])]
+        result_with_ve = model.query(
+            ["B"],
+            evidence={"C": 0},
+            virtual_evidence=virtual_evidence,
+            inference_method="variable_elimination",
+        )
+        self.assertIsInstance(result_with_ve, TabularCPD)

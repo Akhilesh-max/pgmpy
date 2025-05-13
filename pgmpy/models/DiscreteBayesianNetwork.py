@@ -1570,3 +1570,84 @@ class DiscreteBayesianNetwork(DAG):
 
             reader = XDSLReader(path=filename)
             return reader.get_model()
+
+    def query(
+        self,
+        variables,
+        evidence=None,
+        virtual_evidence=None,
+        elimination_order="greedy",
+        joint=True,
+        show_progress=True,
+        inference_method="variable_elimination",
+    ):
+        """
+        Query the Bayesian Network to compute the posterior distribution of variables given evidence.
+
+        This is a wrapper around the query methods provided by the inference classes.
+
+        Parameters
+        ----------
+        variables: list
+            List of variables for which to compute the probability.
+
+        evidence: dict, default=None
+            Dictionary of evidence. The keys are the variables and the values are the observed states.
+
+        virtual_evidence: list, default=None
+            A list of pgmpy.factors.discrete.TabularCPD representing the virtual evidences.
+
+        elimination_order: str or list, default='greedy'
+            Order in which to eliminate the variables in the algorithm. If list is provided,
+            should contain all variables in the model except the ones in `variables`.
+            str options are: `greedy`, `WeightedMinFill`, `MinNeighbors`, `MinWeight`, `MinFill`.
+
+        joint: boolean, default=True
+            If True, returns a Joint Distribution over `variables`.
+            If False, returns a dict of distributions over each of the `variables`.
+
+        show_progress: boolean, default=True
+            If True, shows a progress bar.
+
+        inference_method: str, default='variable_elimination'
+            The inference method to use. Options are 'variable_elimination' or 'belief_propagation'.
+
+        Returns
+        -------
+        DiscreteFactor or dict
+            The posterior distribution of variables given evidence.
+
+        Examples
+        --------
+        >>> from pgmpy.models import DiscreteBayesianNetwork
+        >>> import numpy as np
+        >>> import pandas as pd
+        >>> values = pd.DataFrame(np.random.randint(low=0, high=2, size=(1000, 5)),
+        ...                       columns=['A', 'B', 'C', 'D', 'E'])
+        >>> model = DiscreteBayesianNetwork([('A', 'B'), ('C', 'B'), ('C', 'D'), ('B', 'E')])
+        >>> model.fit(values)
+        >>> posterior = model.query(['A', 'B'], evidence={'C': 0})
+        """
+        from pgmpy.inference import BeliefPropagation, VariableElimination
+
+        if inference_method == "variable_elimination":
+            inference = VariableElimination(self)
+        elif inference_method == "belief_propagation":
+            inference = BeliefPropagation(self)
+        else:
+            raise ValueError(
+                f"Inference method {inference_method} not supported. Available methods are: variable_elimination, belief_propagation"
+            )
+
+        return inference.query(
+            variables=variables,
+            evidence=evidence,
+            virtual_evidence=virtual_evidence,
+            elimination_order=(
+                elimination_order
+                if inference_method == "variable_elimination"
+                else None
+            ),
+            joint=joint,
+            show_progress=show_progress,
+        )
